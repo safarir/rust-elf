@@ -53,14 +53,16 @@ impl<'data> Note<'data> {
     fn parse_at<E: EndianParse>(
         endian: E,
         _class: Class,
-        align: usize,
+        mut align: usize,
         offset: &mut usize,
         data: &'data [u8],
     ) -> Result<Self, ParseError> {
-        // We don't know what to do if the section or segment header specified a zero alignment, so error
-        // (this is likely a file corruption)
+        // A segment with 0 alignment means no alignment required, i.e. 1, but
+        // both name and description are padded to a 4 byte boundary per the
+        // elf(5) man page and in practice this seems to apply when p_align is
+        // 0 as well.
         if align == 0 {
-            return Err(ParseError::UnexpectedAlignment(align));
+            align = 4;
         }
 
         // It looks like clang and gcc emit 32-bit notes for 64-bit files, so we
@@ -309,22 +311,6 @@ mod parse_tests {
                 0x85, 0x5f, 0xee, 0xd3, 0x76, 0xa3,
             ]))
         );
-    }
-
-    #[test]
-    fn parse_note_errors_with_zero_alignment() {
-        // This is a .note.gnu.property section
-        #[rustfmt::skip]
-        let data = [
-            0x04, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00,
-            0x05, 0x00, 0x00, 0x00, 0x47, 0x4e, 0x55, 0x00,
-            0x02, 0x00, 0x00, 0xc0, 0x04, 0x00, 0x00, 0x00,
-            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
-
-        let mut offset = 0;
-        Note::parse_at(LittleEndian, Class::ELF64, 0, &mut offset, &data)
-            .expect_err("Should have gotten an alignment error");
     }
 
     #[test]
