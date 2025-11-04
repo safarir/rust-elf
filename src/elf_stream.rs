@@ -1221,6 +1221,30 @@ mod interface_tests {
             symtab.get(sym_idx).expect("Failed to get expected sym")
         );
     }
+
+    #[test]
+    fn release() {
+        let path = std::path::PathBuf::from("sample-objects/basic.x86_64");
+        let io = std::fs::File::open(path).expect("Could not open file.");
+        let mut file = ElfStream::<AnyEndian, _>::open_stream(io).expect("Open test1");
+
+        let shdr = file.section_headers()[file.ehdr.e_shstrndx as usize];
+        let strtab = file
+            .section_data_as_strtab(&shdr)
+            .expect("Failed to read strtab");
+        assert_eq!(
+            strtab.get(1).expect("Failed to get strtab entry"),
+            ".symtab"
+        );
+
+        // release the stream - should now be able to do some io on it
+        let mut released_io = file.release();
+        released_io.seek(SeekFrom::Start(0)).expect("should seek");
+        let mut bytes = vec![0; abi::EI_NIDENT].into_boxed_slice();
+        released_io.read_exact(&mut bytes).expect("should read");
+        let magic = bytes.split_at(abi::EI_CLASS).0;
+        assert_eq!(magic, abi::ELFMAGIC);
+    }
 }
 
 #[cfg(test)]
